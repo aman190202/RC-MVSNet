@@ -4,3 +4,4 @@ __pycache__/
 losses/__pycache__/
 models/__pycache__/
 datasets/__pycache__/
+data/
