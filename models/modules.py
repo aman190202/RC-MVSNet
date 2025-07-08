@@ -448,16 +448,19 @@ class FeatureNet(nn.Module):
 
         elif self.arch_mode == "fpn":
             if self.num_stage == 3:
-                intra_feat = F.interpolate(intra_feat, scale_factor=2, mode="nearest",recompute_scale_factor=True) + self.inner1(conv1)
+                # upsample to match exactly conv1 spatial size (handles odd input dims)
+                intra_feat = F.interpolate(intra_feat, size=conv1.shape[-2:], mode="nearest") + self.inner1(conv1)
                 out = self.out2(intra_feat)
                 outputs["stage2"] = out
 
-                intra_feat = F.interpolate(intra_feat, scale_factor=2, mode="nearest",recompute_scale_factor=True) + self.inner2(conv0)
+                # upsample to match exactly conv0 spatial size (handles odd input dims)
+                intra_feat = F.interpolate(intra_feat, size=conv0.shape[-2:], mode="nearest") + self.inner2(conv0)
                 out = self.out3(intra_feat)
                 outputs["stage3"] = out
 
             elif self.num_stage == 2:
-                intra_feat = F.interpolate(intra_feat, scale_factor=2, mode="nearest",recompute_scale_factor=True) + self.inner1(conv1)
+                # upsample to match exactly conv1 spatial size (handles odd input dims)
+                intra_feat = F.interpolate(intra_feat, size=conv1.shape[-2:], mode="nearest") + self.inner1(conv1)
                 out = self.out2(intra_feat)
                 outputs["stage2"] = out
 
@@ -493,10 +496,24 @@ class CostRegNet(nn.Module):
         conv0 = self.conv0(x) # 2,8,48,128,160
         conv2 = self.conv2(self.conv1(conv0)) #2,16,24,64,80
         conv4 = self.conv4(self.conv3(conv2))#2,32,12,32,40
-        x = self.conv6(self.conv5(conv4))#2,64,6,16,20
-        x = conv4 + self.conv7(x)#2,32,12,32,40
-        x = conv2 + self.conv9(x)#2,16,24,64,80
-        x = conv0 + self.conv11(x)#2,8,48,128,160
+        x = self.conv6(self.conv5(conv4))  # deepest level
+
+        # upsample and match sizes before residual adds
+        up1 = self.conv7(x)
+        # crop if necessary to handle odd spatial sizes
+        if up1.shape[2:] != conv4.shape[2:]:
+            up1 = up1[:, :, :conv4.shape[2], :conv4.shape[3], :conv4.shape[4]]
+        x = conv4 + up1
+
+        up2 = self.conv9(x)
+        if up2.shape[2:] != conv2.shape[2:]:
+            up2 = up2[:, :, :conv2.shape[2], :conv2.shape[3], :conv2.shape[4]]
+        x = conv2 + up2
+
+        up3 = self.conv11(x)
+        if up3.shape[2:] != conv0.shape[2:]:
+            up3 = up3[:, :, :conv0.shape[2], :conv0.shape[3], :conv0.shape[4]]
+        x = conv0 + up3
         x = self.prob(x)#2,1,48,128,160
         return x
 

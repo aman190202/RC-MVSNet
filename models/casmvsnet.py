@@ -208,13 +208,18 @@ class CascadeMVSNet(nn.Module):
                                                           max_depth=depth_max,
                                                           min_depth=depth_min)
 
-            outputs_stage = self.DepthNet(features_stage, proj_matrices_stage,
-                                          depth_values=F.interpolate(depth_range_samples.unsqueeze(1),
-                                                                     [self.ndepths[stage_idx],
-                                                                      img.shape[2] // int(stage_scale),
-                                                                      img.shape[3] // int(stage_scale)],
-                                                                     mode='trilinear',
-                                                                     align_corners=Align_Corners_Range).squeeze(1),
+            # ensure depth_values spatial dims exactly match feature map to avoid rounding mismatches
+            feat_h, feat_w = features_stage[0].shape[-2:]
+            depth_values_resized = F.interpolate(
+                depth_range_samples.unsqueeze(1),
+                [self.ndepths[stage_idx], feat_h, feat_w],
+                mode='trilinear', align_corners=Align_Corners_Range
+            ).squeeze(1)
+
+            outputs_stage = self.DepthNet(
+                                          features_stage,
+                                          proj_matrices_stage,
+                                          depth_values=depth_values_resized,
                                           num_depth=self.ndepths[stage_idx],
                                           cost_regularization=self.cost_regularization if self.share_cr else
                                           self.cost_regularization[stage_idx],imgs=imgs)
@@ -395,13 +400,18 @@ class CascadeMVSNet_eval(nn.Module):
                                                           max_depth=depth_max,
                                                           min_depth=depth_min)
 
-            outputs_stage = self.DepthNet(features_stage, proj_matrices_stage,
-                                          depth_values=F.interpolate(depth_range_samples.unsqueeze(1),
-                                                                     [self.ndepths[stage_idx],
-                                                                      img.shape[2] // int(stage_scale),
-                                                                      img.shape[3] // int(stage_scale)],
-                                                                     mode='trilinear',
-                                                                     align_corners=Align_Corners_Range).squeeze(1),
+            # ensure depth_values spatial dims exactly match feature map to avoid rounding mismatches
+            feat_h, feat_w = features_stage[0].shape[-2:]
+            depth_values_resized = F.interpolate(
+                depth_range_samples.unsqueeze(1),
+                [self.ndepths[stage_idx], feat_h, feat_w],
+                mode='trilinear', align_corners=Align_Corners_Range
+            ).squeeze(1)
+
+            outputs_stage = self.DepthNet(
+                                          features_stage,
+                                          proj_matrices_stage,
+                                          depth_values=depth_values_resized,
                                           num_depth=self.ndepths[stage_idx],
                                           cost_regularization=self.cost_regularization if self.share_cr else
                                           self.cost_regularization[stage_idx],imgs=imgs)

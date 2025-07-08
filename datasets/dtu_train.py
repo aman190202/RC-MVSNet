@@ -30,6 +30,7 @@ class MVSDataset(Dataset):
     
     def build_proj_mats(self):
         proj_mats, intrinsics_nerf, world2cams, cam2worlds = [], [], [], []
+        near_fars = []
         for vid in self.id_list:
             proj_mat_filename = os.path.join(self.datapath,
                                              f'Cameras/train/{vid:08d}_cam.txt')
@@ -45,11 +46,13 @@ class MVSDataset(Dataset):
             intrinsic_nerf[:2] = intrinsic_nerf[:2] / 4
             proj_mat_l[:3, :4] = intrinsic_nerf @ extrinsic[:3, :4]
 
-            proj_mats += [(proj_mat_l, near_far)]
+            proj_mats += [proj_mat_l]
+            near_fars += [near_far]
             world2cams += [extrinsic]
             cam2worlds += [np.linalg.inv(extrinsic)]
 
         self.proj_mats, self.intrinsics_nerf = np.stack(proj_mats), np.stack(intrinsics_nerf)
+        self.near_fars = np.stack(near_fars)
         self.world2cams, self.cam2worlds = np.stack(world2cams), np.stack(cam2worlds)
     
     def build_list(self):
@@ -180,10 +183,14 @@ class MVSDataset(Dataset):
 
 
     def read_mask_hr(self, filename):
-        img = Image.open(filename)
-        np_img = np.array(img, dtype=np.float32)
-        np_img = (np_img > 10).astype(np.float32)
-        np_img = self.prepare_img(np_img)
+        if(not os.path.exists(filename)):
+            h3, w3 = 512, 640
+            np_img = np.zeros((h3, w3),dtype=np.float32)
+        else:
+            img = Image.open(filename)
+            np_img = np.array(img, dtype=np.float32)
+            np_img = (np_img > 10).astype(np.float32)
+            np_img = self.prepare_img(np_img)
 
         h, w = np_img.shape
         np_img_ms = {
@@ -213,7 +220,11 @@ class MVSDataset(Dataset):
     def read_depth_hr(self, filename):
         # read pfm depth file
         # w1600-h1200-> 800-600 ; crop -> 640, 512; downsample 1/4 -> 160, 128
-        depth_hr = np.array(read_pfm(filename)[0], dtype=np.float32)
+        if(not os.path.exists(filename)):
+            h3, w3 = 512, 640
+            depth_hr = np.zeros((h3, w3),dtype=np.float32)
+        else:
+            depth_hr = np.array(read_pfm(filename)[0], dtype=np.float32)
         depth_lr = self.prepare_img(depth_hr)
 
         h, w = depth_lr.shape
@@ -248,15 +259,13 @@ class MVSDataset(Dataset):
         proj_mats, intrinsics_all, w2cs, c2ws, near_fars = [], [], [], [], [] 
         for i, vid in enumerate(view_ids):
             # NOTE that the id in image file names is from 1 to 49 (not 0~48)
-            img_filename = os.path.join(self.datapath,
-                                        'Rectified/{}_train/rect_{:0>3}_{}_r5000.png'.format(scan, vid + 1, light_idx))
-
+            # img_filename = os.path.join(self.datapath,
+            #                             'Rectified/{}_train/rect_{:0>3}_{}_r5000.png'.format(scan, vid + 1, light_idx))
+            img_filename = os.path.join(self.datapath,'images_post/{:0>8}.jpg').format(vid)
             mask_filename_hr = os.path.join(self.datapath, 'Depths_raw/{}/depth_visual_{:0>4}.png'.format(scan, vid))
             depth_filename_hr = os.path.join(self.datapath, 'Depths_raw/{}/depth_map_{:0>4}.pfm'.format(scan, vid))
 
             proj_mat_filename = os.path.join(self.datapath, 'Cameras/train/{:0>8}_cam.txt').format(vid)
-
-            # img = self.read_img(img_filename)
             image_aug = self.read_img_aug(img_filename)
             image_seg = self.read_img_seg(img_filename)
             center_img = self.center_image(cv2.cvtColor(cv2.imread(img_filename), cv2.COLOR_BGR2RGB))
@@ -264,7 +273,9 @@ class MVSDataset(Dataset):
 
             # Nerf_data
             index_mat = self.remap[vid]
-            proj_mat_ls, near_far = self.proj_mats[index_mat]
+            proj_mat_ls = self.proj_mats[index_mat]
+            near_far = self.near_fars[index_mat]
+
             intrinsics_all.append(self.intrinsics_nerf[index_mat])
             w2cs.append(self.world2cams[index_mat])
             c2ws.append(self.cam2worlds[index_mat])

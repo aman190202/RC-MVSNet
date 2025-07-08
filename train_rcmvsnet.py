@@ -338,7 +338,6 @@ def train_sample(model, model_loss, optimizer, sample, args):
     num_stage = len([int(nd) for nd in args.ndepths.split(",") if nd])
     depth_gt = depth_gt_ms["stage{}".format(num_stage)]
     mask = mask_ms["stage{}".format(num_stage)]
-
     outputs,volume_feature = model(sample_cuda["imgs"], sample_cuda["proj_matrices"], sample_cuda["depth_values"])
     depth_est = outputs["depth"]
     
@@ -473,7 +472,7 @@ def test_sample_depth(model, model_loss, sample, args):
                       "thres2mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 2),
                       "thres4mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 4),
                       "thres8mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 8),
-                    #   "thres14mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 14),
+                    #   "thres14mm_error": Thres_metrics (depth_est, depth_gt, mask > 0.5, 14),
                     #   "thres20mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 20),
                       "thres2mm_accu": 1- Thres_metrics(depth_est, depth_gt, mask > 0.5, 2),
                       "thres4mm_accu": 1 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 4),

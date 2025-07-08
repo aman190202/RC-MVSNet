@@ -5,3 +5,6 @@ losses/__pycache__/
 models/__pycache__/
 datasets/__pycache__/
 data/
+dtu_exp/
+data/
+plot101/
