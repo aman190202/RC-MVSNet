@@ -718,17 +718,34 @@ class CostReg(nn.Module):
 
         # self.conv12 = nn.Conv3d(8, 8, 3, stride=1, padding=1, bias=True)
 
+    @staticmethod
+    def _match_size(a, b):
+        """Crop or pad tensors so they have identical spatial sizes (D,H,W)."""
+        if a.shape[2:] == b.shape[2:]:
+            return a, b
+        D = min(a.shape[2], b.shape[2])
+        H = min(a.shape[3], b.shape[3])
+        W = min(a.shape[4], b.shape[4])
+        a = a[:, :, :D, :H, :W]
+        b = b[:, :, :D, :H, :W]
+        return a, b
+
     def forward(self, x):
         conv0 = self.conv0(x)
         conv2 = self.conv2(self.conv1(conv0))
         conv4 = self.conv4(self.conv3(conv2))
 
         x = self.conv6(self.conv5(conv4))
-        x = conv4 + self.conv7(x)
+        add1_left, add1_right = self._match_size(conv4, self.conv7(x))
+        x = add1_left + add1_right
         del conv4
-        x = conv2 + self.conv9(x)
+
+        add2_left, add2_right = self._match_size(conv2, self.conv9(x))
+        x = add2_left + add2_right
         del conv2
-        x = conv0 + self.conv11(x)
+
+        add3_left, add3_right = self._match_size(conv0, self.conv11(x))
+        x = add3_left + add3_right
         del conv0
         # x = self.conv12(x)
         return x

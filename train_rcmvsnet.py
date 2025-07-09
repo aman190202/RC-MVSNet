@@ -72,7 +72,7 @@ parser.add_argument('--master_port',default='11026',help='port number')
 #   added for rendering network#################################################################################
 
 parser.add_argument('--imgScale_train', type=float, default=1.0)
-parser.add_argument('--imgScale_test', type=float, default=1.0)
+parser.add_argument('--imgScale_test', type=float, default=1.0  )
 parser.add_argument('--img_downscale', type=float, default=1.0)
 parser.add_argument('--pad', type=int, default=0)
 
@@ -120,10 +120,25 @@ parser.add_argument("--white_bkgd", action='store_true',
 parser.add_argument("--raw_noise_std", type=float, default=0.,
                         help='std dev of noise added to regularize sigma_a output, 1e0 recommended')
 
+# parse CLI args
 args = parser.parse_args()
-    
-num_gpus = len(args.gpu)
-is_distributed = num_gpus > 1
+
+# make sure args.gpu is a list of ints
+if isinstance(args.gpu, str):
+    args.gpu = [int(g) for g in args.gpu.split(',')]
+
+# -----------------------------------------------------------------------------
+# END gpu argument parsing helper
+# -----------------------------------------------------------------------------
+
+touched_num_gpus = len(args.gpu)
+is_distributed = touched_num_gpus > 1
+
+# we refer to num_gpus later, preserve variable name
+num_gpus = touched_num_gpus
+
+# keep a reference for later sections that might expect args already parsed
+args_parsed = args
 
 
 # main function
@@ -153,13 +168,13 @@ def train(model, model_nerf,model_loss, aug_loss, test_model_loss, optimizer, Tr
                     save_scalars(logger, 'train', scalar_outputs, global_step)
                     save_images(logger, 'train', image_outputs, global_step)
                     print(
-                       "Epoch {}/{}, Iter-S1 {}/{}, lr {:.6f}, train loss = {:.3f},  depth loss = {:.3f}, thres2mm_error = {:.3f}, thres2mm_accu = {:.3f}, thres4mm_error = {:.3f}, thres4mm_accu = {:.3f}, thres8mm_error = {:.3f}, thres8mm_accu = {:.3f},time = {:.3f}".format(
+                       "Epoch {}/{}, Iter-S1 {}/{}, lr {:.6f}, train loss = {:.3f},  depth loss = {:.3f},time = {:.3f}".format(
                            epoch_idx, args.epochs, batch_idx, len(TrainImgLoader),
                            optimizer.param_groups[0]["lr"], loss,
                            scalar_outputs['depth_loss_stage3'],
-                           scalar_outputs['thres2mm_error'],scalar_outputs['thres2mm_accu'],
-                           scalar_outputs['thres4mm_error'],scalar_outputs['thres4mm_accu'],
-                           scalar_outputs['thres8mm_error'],scalar_outputs['thres8mm_accu'],
+                        #    scalar_outputs['thres2mm_error'],scalar_outputs['thres2mm_accu'],
+                        #    scalar_outputs['thres4mm_error'],scalar_outputs['thres4mm_accu'],
+                        #    scalar_outputs['thres8mm_error'],scalar_outputs['thres8mm_accu'],
                            time.time() - start_time))
                 avg_train_scalars.update(scalar_outputs)
                 del scalar_outputs, image_outputs
@@ -171,13 +186,13 @@ def train(model, model_nerf,model_loss, aug_loss, test_model_loss, optimizer, Tr
                     save_scalars(logger, 'train', aug_scalar_outputs, global_step)
                     save_images(logger, 'train', aug_image_outputs, global_step)
                     print(
-                       "Epoch {}/{}, Iter-S2 {}/{}, lr {:.6f}, aug loss = {:.3f}, depth loss = {:.3f}, thres2mm_error = {:.3f}, thres2mm_accu = {:.3f}, thres4mm_error = {:.3f}, thres4mm_accu = {:.3f}, thres8mm_error = {:.3f}, thres8mm_accu = {:.3f}, time = {:.3f}".format(
+                       "Epoch {}/{}, Iter-S2 {}/{}, lr {:.6f}, aug loss = {:.3f}, depth loss = {:.3f}, time = {:.3f}".format(
                            epoch_idx, args.epochs, batch_idx, len(TrainImgLoader),
                            optimizer.param_groups[0]["lr"], loss_t,
                            aug_scalar_outputs['aug_loss_stage3'],
-                           aug_scalar_outputs['thres2mm_error'],aug_scalar_outputs['thres2mm_accu'],
-                           aug_scalar_outputs['thres4mm_error'],aug_scalar_outputs['thres4mm_accu'],
-                           aug_scalar_outputs['thres8mm_error'],aug_scalar_outputs['thres8mm_accu'],
+                        #    aug_scalar_outputs['thres2mm_error'],aug_scalar_outputs['thres2mm_accu'],
+                        #    aug_scalar_outputs['thres4mm_error'],aug_scalar_outputs['thres4mm_accu'],
+                        #    aug_scalar_outputs['thres8mm_error'],aug_scalar_outputs['thres8mm_accu'],
                            time.time() - start_time))
                 avg_aug_scalars.update(aug_scalar_outputs)
                 del aug_scalar_outputs, aug_image_outputs
@@ -299,8 +314,8 @@ def train_render_net(volume_feature,model_nerf,sample,optimizer,pseudo_depth,epo
     abs_err = abs_error(depth_pred, rays_depth, mask).mean()
 
 
-    psnr = mse2psnr(img2mse(rgb.cpu()[mask], target_s.cpu()[mask]))
-    psnr_out = mse2psnr(img2mse(rgb.cpu()[~mask], target_s.cpu()[~mask]))
+    psnr = mse2psnr(img2mse(rgb[mask], target_s[mask]))
+    psnr_out = mse2psnr(img2mse(rgb[~mask], target_s[~mask]))
 
     # with torch.no_grad():
     #     print('train/loss', loss.item())
@@ -348,25 +363,24 @@ def train_sample(model, model_loss, optimizer, sample, args):
 
     
     scalar_outputs = {"loss": loss,
-                      "repr_loss": repr_loss, 
+                      "repr_loss": repr_loss, }
                       # "depth_loss": depth_loss,
-                      "abs_depth_error": AbsDepthError_metrics(depth_est, depth_gt, mask > 0.5),
-                      "thres2mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 2),
-                      "thres4mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 4),
-                      "thres8mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 8),
-                      "thres2mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 2),
-                      "thres4mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 4),
-                      "thres8mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 8),}
+                    #   "abs_depth_error": AbsDepthError_metrics(depth_est, depth_gt, mask > 0.5),
+                    #   "thres2mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 2),
+                    #   "thres4mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 4),
+                    #   "thres8mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 8),
+                    #   "thres2mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 2),
+                    #   "thres4mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 4),
+                    #   "thres8mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 8),}
 
     for key in scalars.keys():
         scalar_outputs[key] = scalars[key]
 
-    image_outputs = {"depth_est": depth_est * mask,
-                     "depth_est_nomask": depth_est,
-                     "depth_gt": sample["depth"]["stage1"],
+    image_outputs = {"depth_est_nomask": depth_est,
+                    # "depth_gt": sample["depth"]["stage1"],
                      "ref_img": sample["imgs"][:, 0],
-                     "mask": sample["mask"]["stage1"],
-                     "errormap": (depth_est - depth_gt).abs() * mask,
+                    #  "mask": sample["mask"]["stage1"],
+                    #  "errormap": (depth_est - depth_gt).abs() * mask,
                      }
 
     if is_distributed:
@@ -424,13 +438,13 @@ def train_sample_aug(model, aug_loss, optimizer, sample, args, pseudo_depth, epo
 
 
 
-    scalar_outputs = {"aug_loss": loss,
-                      "thres2mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 2),
-                      "thres4mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 4),
-                      "thres8mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 8),
-                      "thres2mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 2),
-                      "thres4mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 4),
-                      "thres8mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 8)}
+    scalar_outputs = {"aug_loss": loss}
+                    #   "thres2mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 2),
+                    #   "thres4mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 4),
+                    #   "thres8mm_error": Thres_metrics(depth_est, depth_gt, mask > 0.5, 8),
+                    #   "thres2mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 2),
+                    #   "thres4mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 4),
+                    #   "thres8mm_accu": 1.0 - Thres_metrics(depth_est, depth_gt, mask > 0.5, 8)}
     for key in scalars.keys():
         scalar_outputs[key] = scalars[key]
 
@@ -609,7 +623,10 @@ def train_begin(rank,args):
         raise NotImplementedError
 
 if __name__ == '__main__':
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.true_gpu
+    # Respect an existing CUDA_VISIBLE_DEVICES if the user already set it.
+    # Otherwise, default to the list given via --gpu.
+    if "CUDA_VISIBLE_DEVICES" not in os.environ or os.environ["CUDA_VISIBLE_DEVICES"].strip() == "":
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, args.gpu))
     if args.resume:
         assert args.mode == "train"
         # assert args.loadckpt is None

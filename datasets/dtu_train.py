@@ -172,7 +172,7 @@ class MVSDataset(Dataset):
         hr_img_ds = cv2.resize(hr_img, (w // 2, h // 2), interpolation=cv2.INTER_NEAREST)
         # crop
         h, w = hr_img_ds.shape
-        target_h, target_w = 512, 640
+        target_h, target_w = 360, 640
         start_h, start_w = (h - target_h) // 2, (w - target_w) // 2
         hr_img_crop = hr_img_ds[start_h: start_h + target_h, start_w: start_w + target_w]
 
@@ -184,7 +184,7 @@ class MVSDataset(Dataset):
 
     def read_mask_hr(self, filename):
         if(not os.path.exists(filename)):
-            h3, w3 = 512, 640
+            h3, w3 = 360, 640
             np_img = np.zeros((h3, w3),dtype=np.float32)
         else:
             img = Image.open(filename)

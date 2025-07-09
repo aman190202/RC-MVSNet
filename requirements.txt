@@ -1,4 +1,4 @@
- absl-py
+absl-py
 beautifulsoup4
 blessings
 cachetools
@@ -24,7 +24,6 @@ mkl-fft
 mkl-random
 mkl-service
 networkx
-numpy
 nvidia-ml-py3
 oauthlib
 olefile

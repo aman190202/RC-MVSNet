@@ -57,9 +57,18 @@ class Rendering_Consistency_Net(nn.Module):
         data_mvs, pose_ref = self.decode_batch(batch)
         imgs, proj_mats = data_mvs['imgs'], data_mvs['proj_mats']
         near_fars, depths_h = data_mvs['near_fars'], data_mvs['depths_h']
-        _,V,H,W = depths_h.shape
+        # depths_h has shape (B, V, H, W) – we just need B and V
+        B, V, H, W = depths_h.shape
 
-        pseudo_depth_h = pseudo_depth.expand(V,H,W).unsqueeze(0)
+        # pseudo_depth comes in as (B, H, W); repeat across V views to get
+        # shape (B, V, H, W)
+        if pseudo_depth.dim() == 3:
+            pseudo_depth_h = pseudo_depth.unsqueeze(1).repeat(1, V, 1, 1)
+        elif pseudo_depth.dim() == 4 and pseudo_depth.shape[1] == 1:
+            pseudo_depth_h = pseudo_depth.repeat(1, V, 1, 1)
+        else:
+            # Already correct shape or unknown – keep as is
+            pseudo_depth_h = pseudo_depth
 
         volume_feature = self.MVSNet(volume_feature_warp,pad=self.args.pad)
         imgs = self.unpreprocess(imgs)
